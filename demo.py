@@ -8,10 +8,12 @@ import glob
 import numpy as np
 import torch
 from PIL import Image
+from datetime import datetime
+import random
 
-from raft import RAFT
-from utils import flow_viz
-from utils.utils import InputPadder
+from raft.raft import RAFT
+from raft.utils import flow_viz
+from raft.utils.utils import InputPadder
 
 
 
@@ -23,20 +25,41 @@ def load_image(imfile):
     return img[None].to(DEVICE)
 
 
+def compute_motion_strength(flow):
+    """Compute the average motion strength from optical flow.
+    Args:
+        flow: numpy array of shape (H, W, 2) containing flow vectors (u, v)
+    Returns:
+        float: average motion strength across all pixels
+    """
+    # Calculate magnitude for each pixel: sqrt(u^2 + v^2)
+    magnitude = np.sqrt(np.sum(flow**2, axis=2))
+    # Return average magnitude across all pixels
+    return np.mean(magnitude)
+
 def viz(img, flo):
     img = img[0].permute(1,2,0).cpu().numpy()
     flo = flo[0].permute(1,2,0).cpu().numpy()
     
+    # Compute motion strength
+    motion_strength = compute_motion_strength(flo)
+    
     # map flow to rgb image
-    flo = flow_viz.flow_to_image(flo)
-    img_flo = np.concatenate([img, flo], axis=0)
+    flo_viz = flow_viz.flow_to_image(flo)
+    img_flo = np.concatenate([img, flo_viz], axis=0)
 
-    # import matplotlib.pyplot as plt
-    # plt.imshow(img_flo / 255.0)
-    # plt.show()
+    # Create filename with current timestamp and random number
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    random_num = random.randint(1000, 9999)  # 4-digit random number
+    output_filename = f'flow_result_{timestamp}_{random_num}.png'
+    
+    # Save the image
+    cv2.imwrite(output_filename, img_flo[:, :, [2,1,0]])
+    print(f"Saved flow visualization to {output_filename}")
+    print(f"Motion strength: {motion_strength:.4f}")
 
-    cv2.imshow('image', img_flo[:, :, [2,1,0]]/255.0)
-    cv2.waitKey()
+    
+ 
 
 
 def demo(args):
@@ -64,6 +87,7 @@ def demo(args):
 
 
 if __name__ == '__main__':
+    # python demo.py --model=data/raft/raft-things.pth --path=../RAFT/demo-frames
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', help="restore checkpoint")
     parser.add_argument('--path', help="dataset for evaluation")
